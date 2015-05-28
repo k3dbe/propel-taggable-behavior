@@ -229,9 +229,9 @@ class TaggableBehavior extends Behavior
         $fkTag->setForeignSchemaName($this->tagTable->getSchema());
         $fkTag->setOnDelete(ForeignKey::CASCADE);
         $fkTag->setOnUpdate(ForeignKey::CASCADE);
-        foreach ($pks as $column) {
-            $fkTag->addReference($tagFkColumn->getName(), $column->getName());
-        }
+
+        $tagColumn = $this->tagTable->getColumn('id');
+        $fkTag->addReference($tagFkColumn->getName(), $tagColumn->getName());
         $this->taggingTable->addForeignKey($fkTag);
 
         $fkObj = new ForeignKey();
