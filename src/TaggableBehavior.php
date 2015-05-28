@@ -13,81 +13,26 @@ class TaggableBehavior extends Behavior
 {
 
     protected $parameters = array(
-        'tagging_table'              => '%TABLE%_tagging',
-        'tagging_table_phpname'      => '%PHPNAME%Tagging',
-        'tag_table'                  => 'tags',
-        'tag_table_phpname'          => 'Tag',
-        'enable_categories'          => false,
-        'tag_category_table'         => 'tags_categories',
-        'tag_category_table_phpname' => 'TagCategory',
+        'tagging_table'         => '%TABLE%_tag',
+        'tagging_table_phpname' => '%PHPNAME%Tag',
+        'tag_table'             => 'tag',
+        'tag_table_phpname'     => 'Tag',
     );
 
-    protected $taggingTable,
-        $tagTable,
-        $tagCategoryTable,
-        $objectBuilderModifier,
-        $queryBuilderModifier,
-        $peerBuilderModifier;
+    /** @var Table */
+    protected $taggingTable;
+
+    /** @var Table */
+    protected $tagTable;
+
+    protected $objectBuilderModifier;
+    protected $queryBuilderModifier;
+    protected $peerBuilderModifier;
 
     public function modifyTable()
     {
-        if (true === $this->getParameter('enable_categories')) {
-            $this->createTagCategoryTable();
-        }
-
         $this->createTagTable();
         $this->createTaggingTable();
-    }
-
-    protected function createTagCategoryTable()
-    {
-        $table    = $this->getTable();
-        $database = $table->getDatabase();
-
-        $tagCategoryTableName    = $this->getTagCategoryTableName();
-        $tagCategoryTablePhpName = $this->replaceTokens($this->getParameter('tag_category_table_phpname'));
-
-        if ($database->hasTable($tagCategoryTableName)) {
-            $this->tagCategoryTable = $database->getTable($tagCategoryTableName);
-        } else {
-            $this->tagCategoryTable = $database->addTable(
-                array(
-                    'name'      => $tagCategoryTableName,
-                    'phpName'   => $tagCategoryTablePhpName,
-                    'package'   => $table->getPackage(),
-                    'schema'    => $table->getSchema(),
-                    'namespace' => '\\' . $table->getNamespace(),
-                )
-            );
-
-            // every behavior adding a table should re-execute database behaviors
-            // see bug 2188 http://www.propelorm.org/changeset/2188
-            foreach ($database->getBehaviors() as $behavior) {
-                $behavior->modifyDatabase();
-            }
-        }
-
-        if (!$this->tagCategoryTable->hasColumn('id')) {
-            $this->tagCategoryTable->addColumn(
-                array(
-                    'name'          => 'id',
-                    'type'          => PropelTypes::INTEGER,
-                    'primaryKey'    => 'true',
-                    'autoIncrement' => 'true',
-                )
-            );
-        }
-
-        if (!$this->tagCategoryTable->hasColumn('name')) {
-            $this->tagCategoryTable->addColumn(
-                array(
-                    'name'          => 'name',
-                    'type'          => PropelTypes::VARCHAR,
-                    'size'          => '60',
-                    'primaryString' => 'true'
-                )
-            );
-        }
     }
 
     protected function createTagTable()
@@ -126,33 +71,6 @@ class TaggableBehavior extends Behavior
                     'autoIncrement' => 'true',
                 )
             );
-        }
-
-        if (true === $this->getParameter('enable_categories')) {
-
-            if ($this->tagTable->hasColumn('category_id')) {
-                $categoryFkColumn = $this->tagTable->getColumn('category_id');
-            } else {
-                $categoryFkColumn = $this->tagTable->addColumn(
-                    array(
-                        'name'     => 'category_id',
-                        'type'     => PropelTypes::INTEGER,
-                        'required' => false,
-                    )
-                );
-            }
-
-            $fkTagCategory = new ForeignKey();
-            $fkTagCategory->setPhpName('Category');
-            $fkTagCategory->setForeignTableCommonName($this->tagCategoryTable->getCommonName());
-            $fkTagCategory->setForeignSchemaName($this->tagCategoryTable->getSchema());
-            $fkTagCategory->setOnDelete(ForeignKey::CASCADE);
-            $fkTagCategory->setOnUpdate(ForeignKey::CASCADE);
-            $pks = $this->getTable()->getPrimaryKey();
-            foreach ($pks as $column) {
-                $fkTagCategory->addReference($categoryFkColumn->getName(), $column->getName());
-            }
-            $this->tagTable->addForeignKey($fkTagCategory);
         }
 
         if (!$this->tagTable->hasColumn('name')) {
@@ -263,108 +181,91 @@ class TaggableBehavior extends Behavior
 
     private function addAddTagsMethod(&$script)
     {
-        $table = $this->getTable();
-        $script .= "
+
+        $script = "
 
 /**
-* Add tags
-* @param   array|string    \$tags A string for a single tag or an array of strings for multiple tags
-* @param   PropelPDO       \$con optional connection object
-*/
-public function addTags(\$tags, \$category_id = null, PropelPDO \$con = null) {
-	\$arrTags = is_string(\$tags) ? explode(',', \$tags) : \$tags;
-	// Remove duplicate tags. 
-	\$arrTags = array_intersect_key(\$arrTags, array_unique(array_map('strtolower', \$arrTags)));
-	foreach (\$arrTags as \$tag) {
-		\$tag = trim(\$tag);
-		if (\$tag == \"\") continue;
-		\$theTag = {$this->tagTable->getPhpName()}Query::create()
-			->filterByName(\$tag)";
+ * Adds Tags
+ *
+ * @param           \$tags
+ * @param PropelPDO \$con
+ * @return \$this
+ */
+public function addTags(\$tags, PropelPDO \$con = null)
+{
+    if (is_string(\$tags)) {
+        \$tagNames = explode(',',\$tags);
 
-        if (true === $this->getParameter('enable_categories')) {
-            $script .= "
-            ->_if(!is_null(\$category_id))
-				->filterByCategoryId(\$category_id)
-			->_endIf()";
-        }
-        $script .= "
-			->findOne();
+        /** @var {$this->tagTable->getPhpName()}[]|\\PropelObjectCollection \$tags */
+        \$tags = {$this->tagTable->getPhpName()}Query::create()
+            ->filterByName(\$tagNames)
+            ->find(\$con);
 
-		// if the tag do not already exists
-		if (null === \$theTag) {
-			// create the tag
-			\$theTag = new {$this->tagTable->getPhpName()}();
-			\$theTag->setName(\$tag);";
-        if (true === $this->getParameter('enable_categories')) {
-            $script .= "
-			\$theTag->setCategoryId(\$category_id);";
+        \$existingTags = [];
+        foreach (\$tags as \$t) {
+            \$existingTags[] = \$t->getName();
         }
-        $script .= "
-			\$theTag->save(\$con);
-		}
-		  // Add the tag **only** if not already associated 
-		\$found = false;
-		\$coll = \$this->getTags(null, \$con);
-		foreach (\$coll as \$t) {
-		    if ((\$t->getId() == \$theTag->getId()) && (!\$category_id || (\$category_id == \$t->getCategoryId()))) {
-		        \$found = true;
-		        break;  
-		    }
-		}
-		if (!\$found) {
-		    \$this->addTag(\$theTag);
-		}
-	}
+
+        foreach (array_diff(\$tagNames, \$existingTags) as \$t) {
+            \$tag = (new {$this->tagTable->getPhpName()})->setName(\$t);
+
+            \$newTags[] = \$tag;
+        }
+    }
+
+    \$currentTags = \$this->get{$this->taggingTable->getPhpName()}s(null, \$con);
+
+    foreach (\$tags as \$tag) {
+        if (!\$currentTags->contains(\$tag)) {
+            \$this->doAdd{$this->tagTable->getPhpName()}(\$tag);
+        }
+    }
+
+    return \$this;
 }
-
-		";
+        ";
     }
 
 
     private function addRemoveTagMethod(&$script)
     {
-        $table = new Table();
-        $table = $this->getTable();
-
         $script .= "
 /**
-* Remove a tag
-* @param   array|string    \$tags A string for a single tag or an array of strings for multiple tags
-*/
-public function removeTags(\$tags, \$category_id = null) {
-\$arrTags = is_string(\$tags) ? explode(',', \$tags) : \$tags;
-	foreach (\$arrTags as \$tag) {
-		\$tag = trim(\$tag);
-		\$tagObj = {$this->tagTable->getPhpName()}Query::create()
-			->filterByName(\$tag)
-			->_if(!is_null(\$category_id))
-				->filterByCategoryId(\$category_id)
-			->_endIf()
-			->findOne();
-		if (null === \$tagObj) {
-		    return;
-		}
-		\$taggings = \$this->get{$this->taggingTable->getPhpName()}s();
-		foreach (\$taggings as \$tagging) {
-			if (\$tagging->get{$this->tagTable->getPhpName()}Id() == \$tagObj->getId()) {
-				\$tagging->delete();
-			}
-		}
-	}
-}
-   
-/**
-* Remove all tags
-* @param      PropelPDO \$con optional connection object
-*/
-public function removeAllTags(PropelPDO \$con = null) {
-	// Get all tags for this object
-	\$taggings = \$this->get{$this->taggingTable->getPhpName()}s(\$con);
-	foreach (\$taggings as \$tagging) {
-		\$tagging->delete(\$con);
-	}
+ * @param           \$tags
+ * @param PropelPDO \$con
+ * @return \$this
+ */
+public function removeTags(\$tags, PropelPDO \$con = null)
+{
+    if (is_string(\$tags)) {
+        \$tagNames = explode(',', \$tags);
+
+        /** @var {$this->tagTable->getPhpName()}[]|\\PropelObjectCollection \$tags */
+        \$tags = {$this->tagTable->getPhpName()}Query::create()
+            ->filterByName(\$tagNames)
+            ->find(\$con);
+    }
+
+    foreach (\$tags as \$tag) {
+        \$this->remove{$this->tagTable->getPhpName()}(\$tag);
+    }
+
+    return \$this;
 }
 
+/**
+ * Remove all tags
+ *
+ * @param      PropelPDO \$con optional connection object
+ */
+public function removeAllTags(PropelPDO \$con = null)
+{
+    // Get all tags for this object
+    \$tags = \$this->get{$this->taggingTable->getPhpName()}s(\$con);
+    if (null !== \$tags) {
+        \$tags->delete();
+    }
+}
 		";
     }
 
