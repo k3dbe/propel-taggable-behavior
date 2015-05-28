@@ -14,7 +14,7 @@ If you are using composer then just add:
 ```js
 {
     "require": {
-        "k3dbe/propel-taggable-behavior": "*"
+        "k3dbe/propel-taggable-behavior": "dev-master"
     }
 }
 ```
