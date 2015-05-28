@@ -1,12 +1,12 @@
 {
-    "name": "smirik/propel-taggable-behavior",
+    "name": "k3dbe/propel-taggable-behavior",
     "description": "Add tags functionality to the objects.",
     "keywords": [ "propel", "behavior", "tag" ],
     "license": "MIT",
     "authors": [
         {
-            "name": "Evgeny Smirnov",
-            "email": "es@4xxi.com"
+            "name": "Kamil Siewruk",
+            "email": "kamil@k3d.be"
         }
     ],
     "autoload": {
