@@ -31,7 +31,7 @@ class TaggableBehavior extends Behavior
 
     public function modifyTable()
     {
-        if (true === $this->parameters['enable_categories']) {
+        if (true === $this->getParameter('enable_categories')) {
             $this->createTagCategoryTable();
         }
 
@@ -45,7 +45,7 @@ class TaggableBehavior extends Behavior
         $database = $table->getDatabase();
 
         $tagCategoryTableName    = $this->getTagCategoryTableName();
-        $tagCategoryTablePhpName = $this->replaceTokens($this->parameters['tag_category_table_phpname']);
+        $tagCategoryTablePhpName = $this->replaceTokens($this->getParameter('tag_category_table_phpname'));
 
         if ($database->hasTable($tagCategoryTableName)) {
             $this->tagCategoryTable = $database->getTable($tagCategoryTableName);
@@ -94,7 +94,7 @@ class TaggableBehavior extends Behavior
     {
         $table           = $this->getTable();
         $tagTableName    = $this->getTagTableName();
-        $tagTablePhpName = $this->replaceTokens($this->parameters['tag_table_phpname']);
+        $tagTablePhpName = $this->replaceTokens($this->getParameter('tag_table_phpname'));
         $database        = $table->getDatabase();
 
         if ($database->hasTable($tagTableName)) {
@@ -128,7 +128,7 @@ class TaggableBehavior extends Behavior
             );
         }
 
-        if (true === $this->parameters['enable_categories']) {
+        if (true === $this->getParameter('enable_categories')) {
 
             if ($this->tagTable->hasColumn('category_id')) {
                 $categoryFkColumn = $this->tagTable->getColumn('category_id');
@@ -184,7 +184,7 @@ class TaggableBehavior extends Behavior
             $this->taggingTable = $database->addTable(
                 array(
                     'name'      => $taggingTableName,
-                    'phpName'   => $this->replaceTokens($this->parameters['tagging_table_phpname']),
+                    'phpName'   => $this->replaceTokens($this->getParameter('tagging_table_phpname')),
                     'package'   => $table->getPackage(),
                     'schema'    => $table->getSchema(),
                     'namespace' => '\\' . $table->getNamespace(),
@@ -279,18 +279,27 @@ public function addTags(\$tags, \$category_id = null, PropelPDO \$con = null) {
 		\$tag = trim(\$tag);
 		if (\$tag == \"\") continue;
 		\$theTag = {$this->tagTable->getPhpName()}Query::create()
-			->filterByName(\$tag)
-			->_if(!is_null(\$category_id))
+			->filterByName(\$tag)";
+
+        if (true === $this->getParameter('enable_categories')) {
+            $script .= "
+            ->_if(!is_null(\$category_id))
 				->filterByCategoryId(\$category_id)
-			->_endIf()
+			->_endIf()";
+        }
+        $script .= "
 			->findOne();
 
 		// if the tag do not already exists
 		if (null === \$theTag) {
 			// create the tag
 			\$theTag = new {$this->tagTable->getPhpName()}();
-			\$theTag->setName(\$tag);
-			\$theTag->setCategoryId(\$category_id);
+			\$theTag->setName(\$tag);";
+        if (true === $this->getParameter('enable_categories')) {
+            $script .= "
+			\$theTag->setCategoryId(\$category_id);";
+        }
+        $script .= "
 			\$theTag->save(\$con);
 		}
 		  // Add the tag **only** if not already associated 
