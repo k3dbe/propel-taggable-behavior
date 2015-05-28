@@ -7,6 +7,13 @@
         {
             "name": "Kamil Siewruk",
             "email": "kamil@k3d.be"
+        },
+        {
+            "name": "Evgeny Smirnov",
+            "email": "smirik@gmail.com"
+        },
+        {
+            "name": "Matteo Giachino (matteosister)"
         }
     ],
     "autoload": {
